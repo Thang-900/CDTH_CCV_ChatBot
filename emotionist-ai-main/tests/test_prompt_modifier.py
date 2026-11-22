@@ -254,6 +254,18 @@ class TestPromptModifier:
         prompt = modifier.build_system_prompt(entity)
         assert "response" in prompt.lower()
 
+    def test_build_system_prompt_defaults_to_vietnamese(self):
+        modifier = PromptModifier()
+        entity = self._make_entity()
+        prompt = modifier.build_system_prompt(entity)
+        assert "chỉ trả lời bằng tiếng Việt" in prompt
+
+    def test_build_system_prompt_can_still_select_english(self):
+        modifier = PromptModifier()
+        entity = self._make_entity()
+        prompt = modifier.build_system_prompt(entity, language="en")
+        assert "Always respond ONLY in English" in prompt
+
     def test_build_system_prompt_returns_string(self):
         modifier = PromptModifier()
         entity = self._make_entity()

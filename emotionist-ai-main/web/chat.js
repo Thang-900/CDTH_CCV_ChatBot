@@ -8,17 +8,17 @@ let selectsReady = false;
 function renderMessages(messages) {
   const el = $("chat");
   if (!messages || !messages.length) {
-    el.innerHTML = '<div class="empty">Start the conversation - say the first thing you\'d say to them.</div>';
+    el.innerHTML = '<div class="empty">Hãy bắt đầu trò chuyện - gửi lời đầu tiên bạn muốn nói với nhân vật.</div>';
     return;
   }
   el.innerHTML = messages
     .map((m) => {
       if (m.role === "user") {
-        return `<div class="msg sam"><div class="bubble">${escapeHtml(m.text)}</div><div class="meta">You</div></div>`;
+        return `<div class="msg sam"><div class="bubble">${escapeHtml(m.text)}</div><div class="meta">Bạn</div></div>`;
       }
       return `<div class="msg alex">
         <div class="bubble">${escapeHtml(m.text)}</div>
-        <div class="meta">Counterpart</div>
+        <div class="meta">Nhân vật đối thoại</div>
         ${eventBadge(m.event)}
       </div>`;
     })
@@ -27,10 +27,10 @@ function renderMessages(messages) {
 }
 
 function renderRetrieved(hits, backend) {
-  $("rag-backend").textContent = backend ? `- ${backend}` : "";
+  $("rag-backend").textContent = backend ? `- ${label(BACKEND_LABELS, backend)}` : "";
   const el = $("retrieved");
   if (!hits || !hits.length) {
-    el.innerHTML = '<div class="calm">- nothing retrieved yet -</div>';
+    el.innerHTML = '<div class="calm">- chưa có nội dung được truy xuất -</div>';
     return;
   }
   el.innerHTML = hits
@@ -44,20 +44,20 @@ function render(state) {
   if (!selectsReady) {
     // personality + seed selects
     const psel = $("cfg-personality");
-    state.personalities.forEach((p) => psel.add(new Option(p, p)));
+    state.personalities.forEach((p) => psel.add(new Option(label(PERSONALITY_LABELS, p), p)));
     const seed = $("cfg-seed");
-    seed.add(new Option("None", "None"));
-    state.seed_options.forEach((s) => seed.add(new Option(s, s)));
+    seed.add(new Option("Không có", "None"));
+    state.seed_options.forEach((s) => seed.add(new Option(label(EMOTION_LABELS, s), s)));
 
     // scenario picker (#14): "- Custom -" + presets
     const ssel = $("cfg-scenario");
-    ssel.add(new Option("- Custom agent -", ""));
+    ssel.add(new Option("- Nhân vật tùy chỉnh -", ""));
     state.scenarios.forEach((s) => ssel.add(new Option(s.display_name, s.id)));
 
     // model picker (#45): disable unavailable (Groq w/o key)
     const msel = $("cfg-model");
     state.models.forEach((m) => {
-      const opt = new Option(m.available ? m.label : `${m.label} (no key)`, m.id);
+      const opt = new Option(m.available ? m.label : `${m.label} (chưa cấu hình khóa API)`, m.id);
       opt.disabled = !m.available;
       msel.add(opt);
     });
@@ -68,22 +68,22 @@ function render(state) {
   $("cfg-scenario").value = state.scenario_id || "";
   $("cfg-model").value = state.model_id;
   const sc = state.scenarios.find((s) => s.id === state.scenario_id);
-  $("cfg-scenario-sit").textContent = sc ? sc.situation : "Build your own counterpart below.";
+  $("cfg-scenario-sit").textContent = sc ? sc.situation : "Tạo nhân vật của riêng bạn bên dưới.";
   const md = state.models.find((m) => m.id === state.model_id);
   $("cfg-model-note").textContent = md ? md.note : "";
 
   $("cfg-rx-ref").textContent =
-    `resilient ${state.reactivity_ref.resilient} - average ${state.reactivity_ref.average} - neurotic ${state.reactivity_ref.neurotic}`;
+    `Kiên cường ${state.reactivity_ref.resilient} - Cân bằng ${state.reactivity_ref.average} - Dễ bất ổn ${state.reactivity_ref.neurotic}`;
 
   // live state panel
   $("agent-pill").textContent = a.name;
   $("state-name").textContent = a.name;
   const badge = $("state-badge");
-  badge.textContent = a.personality;
+  badge.textContent = label(PERSONALITY_LABELS, a.personality);
   badge.className = "badge badge-" + a.personality;
   renderEmotions($("emo"), a.emotions);
   renderParams($("par"), a.params);
-  $("decay").textContent = `decay lambda ${a.decay} - reactivity ${a.reactivity}`;
+  $("decay").textContent = `Hệ số suy giảm λ ${a.decay} - mức phản ứng ${a.reactivity}`;
   $("sysprompt").textContent = a.system_prompt;
   renderRetrieved(state.retrieved, state.retrieval_backend);
 
@@ -99,7 +99,7 @@ function setBusy(on) {
     const node = document.createElement("div");
     node.className = "msg alex";
     node.id = "thinking-node";
-    node.innerHTML = `<div class="bubble"><span class="thinking"><span></span><span></span><span></span></span></div><div class="meta">Counterpart - thinking</div>`;
+    node.innerHTML = `<div class="bubble"><span class="thinking"><span></span><span></span><span></span></span></div><div class="meta">Nhân vật đang suy nghĩ</div>`;
     chat.appendChild(node);
     chat.scrollTop = chat.scrollHeight;
   } else {
@@ -149,7 +149,7 @@ async function resetAgent({ scenario_id, custom }) {
     if (state.error) { alert(state.error); return; }
     render(state);
   } catch (e) {
-    alert("Request failed: " + e);
+    alert("Yêu cầu không thành công: " + e);
   } finally {
     setBusy(false);
   }
@@ -165,7 +165,7 @@ async function sendMessage() {
     if (state.error) { alert(state.error); return; }
     render(state);
   } catch (e) {
-    alert("Request failed: " + e);
+    alert("Yêu cầu không thành công: " + e);
   } finally {
     setBusy(false);
   }
@@ -181,7 +181,7 @@ $("cfg-rx").addEventListener("input", (e) => { $("cfg-rx-val").textContent = par
 $("sp-toggle").addEventListener("click", () => {
   spOpen = !spOpen;
   $("sysprompt").hidden = !spOpen;
-  $("sp-toggle").textContent = spOpen ? "hide" : "show";
+  $("sp-toggle").textContent = spOpen ? "Ẩn" : "Hiện";
 });
 
 // -- Boot ----------------------------------------------------------------------

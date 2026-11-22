@@ -11,7 +11,8 @@ class Agent:
         name: str,
         personality: str = "average",
         base_persona: str = "",
-        model: str = "llama-3.3-70b-versatile",
+        # model: str = "llama-3.3-70b-versatile"
+        model: str = "openai/gpt-oss-120b",
         reactivity: float | None = None,
         provider: str | None = None,
     ):
@@ -29,7 +30,7 @@ class Agent:
         self.last_event: dict = {}
 
     def receive_and_respond(self, incoming_message: str, witness_event: dict | None = None,
-                            retrieved_context: str = "", language: str = "hu") -> str:
+                            retrieved_context: str = "", language: str = "vi") -> str:
         """
         Full pipeline: appraise incoming message -> update emotional state ->
         build emotionally-modulated prompt -> generate response.

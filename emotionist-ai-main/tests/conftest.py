@@ -1,8 +1,7 @@
 """
 Shared pytest configuration.
 
-server.py instantiates GAME and CHAT at module-import time. Both create
-Agent objects which create a Groq client. We need to ensure:
+server.py creates chat Agents when sessions are initialized. We need to ensure:
 1. GROQ_API_KEY env var is set so Groq doesn't raise on construction.
 2. Groq's actual API calls are mocked so no real HTTP requests are made.
 

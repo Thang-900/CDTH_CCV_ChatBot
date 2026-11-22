@@ -19,7 +19,8 @@ import urllib.request
 from abc import ABC, abstractmethod
 
 # Defaults are overridable via env so non-coders can retune without edits.
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+# DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 # qwen2.5:3b (~1.9 GB Q4) fits a 4 GB GPU and is far better at the appraisal
 # JSON + emotional nuance than a 1B. Set OLLAMA_MODEL=llama3.2:1b for a lighter,
 # faster-but-dumber fallback on weaker hardware.
@@ -85,17 +86,28 @@ class OllamaProvider(LLMProvider):
 # Curated models the Chat UI lets the user switch between at runtime (#45).
 # `id` doubles as the underlying model name for both backends, so the UI can
 # send one string and we resolve the provider from this table. `note` is the
-# caveat shown to the user (cloud cost vs offline Hungarian quality).
+# caveat shown to the user (cloud cost vs local model performance).
 AVAILABLE_MODELS = [
-    {"id": "llama-3.3-70b-versatile", "provider": "groq",
-     "label": "Groq - Llama 3.3 70B", "note": "Cloud - strongest Hungarian"},
-    {"id": "llama-3.1-8b-instant", "provider": "groq",
-     "label": "Groq - Llama 3.1 8B", "note": "Cloud - fast, lighter"},
-    {"id": "qwen2.5:3b", "provider": "ollama",
-     "label": "Ollama - Qwen2.5 3B", "note": "Local/offline - weak Hungarian"},
+    {
+        "id": "openai/gpt-oss-120b",
+        "provider": "groq",
+        "label": "Groq - GPT OSS 120B",
+        "note": "Trực tuyến - năng lực cao",
+    },
+    {
+        "id": "openai/gpt-oss-20b",
+        "provider": "groq",
+        "label": "Groq - GPT OSS 20B",
+        "note": "Trực tuyến - gọn nhẹ, phản hồi nhanh",
+    },
+    {
+        "id": "qwen2.5:3b",
+        "provider": "ollama",
+        "label": "Ollama - Qwen2.5 3B",
+        "note": "Chạy trên máy - không cần mạng",
+    },
 ]
 _MODELS_BY_ID = {m["id"]: m for m in AVAILABLE_MODELS}
-
 
 def default_model_id() -> str:
     """The model selected on startup, honoring the LLM_PROVIDER env default."""

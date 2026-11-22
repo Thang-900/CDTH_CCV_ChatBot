@@ -75,7 +75,7 @@ The system implements the OCC (Ortony, Clore & Collins) appraisal model - the do
 
 That persistent, reactive emotion is exactly what makes a believable **person to practice against**. Emotionist.ai ships as a **difficult-conversation simulator**: you rehearse a hard conversation and the agent is the emotionally-reactive counterpart whose mood persists until you handle it well. An angry customer stays angry for several turns; say the right thing and they soften.
 
-Built-in scenarios (Hungarian, for a bank frontline-training demo): **Dühös ügyfél** (angry customer, card wrongly blocked), **Csalás áldozata** (panicked fraud victim), **Védekező munkatárs** (defensive employee in a review), **Elutasított hiteligénylő** (calm-but-stubborn rejected loan applicant). Add your own in [`agents/personas.py`](agents/personas.py) - see [CONTRIBUTING.md](CONTRIBUTING.md).
+Built-in scenarios for a bank frontline-training demo: **Khách hàng tức giận** (card wrongly blocked), **Nạn nhân bị lừa đảo**, **Nhân viên có thái độ phòng thủ**, and **Khách hàng bị từ chối khoản vay**. Add your own in [`agents/personas.py`](agents/personas.py) - see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 <div align="center">
   <img src="web/screenshot.png" alt="Emotionist.ai - practice-partner chat UI with scenario cards, live emotion bars, and retrieved-context panel" width="100%" />
@@ -270,7 +270,7 @@ A dark, premium React interface served at **http://127.0.0.1:8000**.
 
 **Chat (the practice partner).** Pick a **practice scenario** (a selectable card for the counterpart you rehearse against) and an **LLM model**, then have the conversation. Or build a custom agent - name, personality, persona, reactivity, pre-seeded emotions. Live panels show the counterpart's emotion bars, behavioral profile, the **"Show live system prompt"** toggle (reveals what the LLM is told to *feel* - "you **are** angry, not act angry"), and a **Retrieved Context (RAG)** panel showing which earlier turns were pulled into the prompt.
 
-The **model switcher** matters for the demo: Groq `llama-3.3-70b` produces strong Hungarian; local `qwen2.5:3b` runs offline/free but with weaker Hungarian. Switch live to show the trade-off. A **language toggle** (Magyar / English) flips the counterpart's response language mid-conversation - show the local model at its best in English, then switch back to Hungarian on Groq.
+The **model switcher** matters for the demo: Groq GPT OSS models provide cloud inference; local `qwen2.5:3b` runs offline/free. Switch live to show the trade-off. The **language toggle** defaults to Vietnamese and can switch the counterpart's response language to English mid-conversation.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

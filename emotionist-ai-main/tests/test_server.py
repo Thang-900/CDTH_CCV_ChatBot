@@ -37,9 +37,14 @@ def fresh_game():
 
 @pytest.fixture
 def fresh_chat():
-    """A fresh ChatSession (independent of the global CHAT)."""
+    """A fresh ChatSession outside the API session registry."""
     from server import ChatSession
     return ChatSession()
+
+@pytest.fixture
+def chat_session_id(client):
+    """An initialized API chat session."""
+    return client.get("/api/chat/state").json()["session_id"]
 
 
 # -- Game class ----------------------------------------------------------------
@@ -476,6 +481,20 @@ class TestApiChatState:
         data = client.get("/api/chat/state").json()
         assert "agent" in data
 
+    def test_get_chat_state_defaults_to_vietnamese(self, client):
+        data = client.get("/api/chat/state").json()
+        assert data["language"] == "vi"
+
+    def test_get_chat_state_creates_unique_session_ids(self, client):
+        first = client.get("/api/chat/state").json()
+        second = client.get("/api/chat/state").json()
+        assert first["session_id"]
+        assert second["session_id"] != first["session_id"]
+
+    def test_get_chat_state_rejects_empty_session_id(self, client):
+        response = client.get("/api/chat/state?session_id=")
+        assert response.status_code == 422
+
     def test_get_chat_state_returns_messages_key(self, client):
         data = client.get("/api/chat/state").json()
         assert "messages" in data
@@ -504,24 +523,37 @@ class TestApiChatState:
 
 
 class TestApiChatReset:
-    def test_post_chat_reset_returns_200(self, client):
-        response = client.post("/api/chat/reset", json={})
+    def test_post_chat_reset_returns_200(self, client, chat_session_id):
+        response = client.post("/api/chat/reset", json={"session_id": chat_session_id})
         assert response.status_code == 200
 
-    def test_post_chat_reset_changes_agent_name(self, client):
-        data = client.post("/api/chat/reset", json={"name": "Zara"}).json()
+    def test_post_chat_language_defaults_invalid_values_to_vietnamese(self, client, chat_session_id):
+        data = client.post("/api/chat/language", json={
+            "session_id": chat_session_id, "language": "hu"
+        }).json()
+        assert data["language"] == "vi"
+
+    def test_post_chat_reset_changes_agent_name(self, client, chat_session_id):
+        data = client.post("/api/chat/reset", json={
+            "session_id": chat_session_id, "name": "Zara"
+        }).json()
         assert data["agent"]["name"] == "Zara"
 
-    def test_post_chat_reset_changes_personality(self, client):
-        data = client.post("/api/chat/reset", json={"personality": "neurotic"}).json()
+    def test_post_chat_reset_changes_personality(self, client, chat_session_id):
+        data = client.post("/api/chat/reset", json={
+            "session_id": chat_session_id, "personality": "neurotic"
+        }).json()
         assert data["agent"]["personality"] == "neurotic"
 
-    def test_post_chat_reset_invalid_personality_defaults_to_average(self, client):
-        data = client.post("/api/chat/reset", json={"personality": "bogus"}).json()
+    def test_post_chat_reset_invalid_personality_defaults_to_average(self, client, chat_session_id):
+        data = client.post("/api/chat/reset", json={
+            "session_id": chat_session_id, "personality": "bogus"
+        }).json()
         assert data["agent"]["personality"] == "average"
 
-    def test_post_chat_reset_with_seed_emotion(self, client):
+    def test_post_chat_reset_with_seed_emotion(self, client, chat_session_id):
         response = client.post("/api/chat/reset", json={
+            "session_id": chat_session_id,
             "name": "Morgan",
             "personality": "average",
             "reactivity": 1.0,
@@ -531,40 +563,86 @@ class TestApiChatReset:
         })
         assert response.status_code == 200
 
-    def test_post_chat_reset_clears_messages(self, client):
-        data = client.post("/api/chat/reset", json={}).json()
+    def test_post_chat_reset_clears_messages(self, client, chat_session_id):
+        data = client.post("/api/chat/reset", json={"session_id": chat_session_id}).json()
         assert data["messages"] == []
+
+    def test_sessions_keep_independent_agents_and_languages(self, client):
+        session_a = "multi-session-a"
+        session_b = "multi-session-b"
+        client.get(f"/api/chat/state?session_id={session_a}")
+        client.get(f"/api/chat/state?session_id={session_b}")
+        client.post("/api/chat/reset", json={"session_id": session_a, "name": "Alice"})
+        client.post("/api/chat/reset", json={"session_id": session_b, "name": "Bob"})
+        client.post("/api/chat/language", json={"session_id": session_a, "language": "en"})
+
+        import server
+        chat_a = server._CHAT_SESSIONS[session_a]
+        chat_b = server._CHAT_SESSIONS[session_b]
+        with patch.object(chat_a.memory, "context_block", return_value=("", [])), \
+             patch.object(chat_a.agent, "receive_and_respond", return_value="Alice reply"):
+            client.post("/api/chat/send", json={
+                "session_id": session_a, "message": "Alice message"
+            })
+        with patch.object(chat_b.memory, "context_block", return_value=("", [])), \
+             patch.object(chat_b.agent, "receive_and_respond", return_value="Bob reply"):
+            client.post("/api/chat/send", json={
+                "session_id": session_b, "message": "Bob message"
+            })
+
+        state_a = client.get(f"/api/chat/state?session_id={session_a}").json()
+        state_b = client.get(f"/api/chat/state?session_id={session_b}").json()
+        assert state_a["agent"]["name"] == "Alice"
+        assert state_a["language"] == "en"
+        assert [message["text"] for message in state_a["messages"]] == [
+            "Alice message", "Alice reply"
+        ]
+        assert state_b["agent"]["name"] == "Bob"
+        assert state_b["language"] == "vi"
+        assert [message["text"] for message in state_b["messages"]] == [
+            "Bob message", "Bob reply"
+        ]
 
 
 class TestApiChatSend:
-    def test_post_chat_send_without_api_key_returns_error(self, client):
+    def test_post_chat_send_without_api_key_returns_error(self, client, chat_session_id):
         env_backup = os.environ.pop("GROQ_API_KEY", None)
         try:
-            data = client.post("/api/chat/send", json={"message": "hello"}).json()
+            data = client.post("/api/chat/send", json={
+                "session_id": chat_session_id, "message": "hello"
+            }).json()
             assert "error" in data
         finally:
             if env_backup:
                 os.environ["GROQ_API_KEY"] = env_backup
 
-    def test_post_chat_send_with_api_key_calls_send(self, client):
+    def test_post_chat_send_with_api_key_calls_send(self, client, chat_session_id):
         import server
         with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
-            with patch.object(server.CHAT, "send", return_value="Agent response") as mock_send:
-                client.post("/api/chat/send", json={"message": "Hello!"})
+            with patch.object(server._CHAT_SESSIONS[chat_session_id], "send",
+                              return_value="Agent response") as mock_send:
+                client.post("/api/chat/send", json={
+                    "session_id": chat_session_id, "message": "Hello!"
+                })
                 mock_send.assert_called_once_with("Hello!")
 
-    def test_post_chat_send_whitespace_only_message_not_sent(self, client):
+    def test_post_chat_send_whitespace_only_message_not_sent(self, client, chat_session_id):
         import server
         with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
-            with patch.object(server.CHAT, "send") as mock_send:
-                client.post("/api/chat/send", json={"message": "   "})
+            with patch.object(server._CHAT_SESSIONS[chat_session_id], "send") as mock_send:
+                client.post("/api/chat/send", json={
+                    "session_id": chat_session_id, "message": "   "
+                })
                 mock_send.assert_not_called()
 
-    def test_post_chat_send_message_is_stripped(self, client):
+    def test_post_chat_send_message_is_stripped(self, client, chat_session_id):
         import server
         with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
-            with patch.object(server.CHAT, "send", return_value="resp") as mock_send:
-                client.post("/api/chat/send", json={"message": "  hello  "})
+            with patch.object(server._CHAT_SESSIONS[chat_session_id], "send",
+                              return_value="resp") as mock_send:
+                client.post("/api/chat/send", json={
+                    "session_id": chat_session_id, "message": "  hello  "
+                })
                 mock_send.assert_called_once_with("hello")
 
 

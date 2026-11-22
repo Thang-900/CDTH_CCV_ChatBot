@@ -9,11 +9,11 @@ export default function App() {
 
       <header className="topbar">
         <div className="hero">
-          <span className="eyebrow">Enterprise Conversation Training</span>
+          <span className="eyebrow">Mô phỏng hội thoại chuyên nghiệp</span>
           <div className="brand">EMOTIONIST<span className="dot">.AI</span></div>
           <div className="brand-sub">
-            Practice partner that <em>feels</em> - rehearse a hard conversation against an
-            emotionally-reactive counterpart whose mood persists until you handle it well.
+            Đối tác thực hành biết <em>cảm nhận</em> - luyện tập những cuộc trò chuyện khó
+            với nhân vật có cảm xúc và tâm trạng thay đổi theo cách bạn ứng xử.
           </div>
         </div>
       </header>

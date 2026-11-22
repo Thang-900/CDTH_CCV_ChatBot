@@ -9,12 +9,14 @@ Run:  uv run python server.py     (or: uv run uvicorn server:app --reload)
 """
 
 import os
+import threading
+import uuid
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agents.agent import Agent
 from agents.personas import SCENARIOS, get_scenario, scenario_label
@@ -71,7 +73,7 @@ async def rate_limit(request: Request, call_next):
         now = time.monotonic()
         recent = [t for t in _hits[ip] if now - t < 60]
         if len(recent) >= _RATE_MAX:
-            return JSONResponse({"error": "Rate limit - slow down a moment."}, status_code=429)
+            return JSONResponse({"error": "Bạn gửi yêu cầu quá nhanh. Vui lòng chờ một chút."}, status_code=429)
         recent.append(now)
         _hits[ip] = recent
     return await call_next(request)
@@ -81,18 +83,22 @@ def _friendly_llm_error(exc: Exception) -> str:
     """Turn a raw provider exception into a demo-safe message (#18)."""
     msg = str(exc)
     if "api_key" in msg.lower() or "401" in msg:
-        return ("LLM auth failed - your Groq key is missing/expired. "
-                "Add a fresh GROQ_API_KEY to .env, or pick a local (Ollama) model.")
+        return ("Xác thực Groq thất bại - khóa API bị thiếu hoặc hết hạn. "
+                "Hãy cập nhật GROQ_API_KEY trong .env hoặc chọn mô hình chạy trên máy (Ollama).")
     if "connection" in msg.lower() or "refused" in msg.lower() or "urlopen" in msg.lower():
-        return ("Couldn't reach the model - for local models start it with "
-                "`ollama serve` (and pull it); for Groq check your connection.")
-    return f"LLM call failed: {msg}"
+        return ("Không thể kết nối đến mô hình - với mô hình chạy trên máy, hãy khởi động "
+                "`ollama serve` và tải mô hình; nếu dùng Groq, hãy kiểm tra kết nối mạng.")
+    return f"Gọi mô hình AI thất bại: {msg}"
 
 
 # -- Practice-partner chat (the only mode) -------------------------------------
 SEED_EMOTIONS = ["Joy", "Anger", "Fear", "Shame", "Pride", "Distress",
                  "Gratitude", "Sadness", "Anticipation", "Trust"]
 PERSONALITIES = ["neurotic", "average", "resilient"]
+
+SESSIONS: dict[str, Agent] = {}
+_CHAT_SESSIONS: dict[str, "ChatSession"] = {}
+_SESSIONS_LOCK = threading.Lock()
 
 
 class ChatSession:
@@ -103,15 +109,17 @@ class ChatSession:
     seeds from agents/personas.py. Each session owns a SessionMemory for RAG (#22).
     """
 
-    def __init__(self):
-        self.language = "hu"          # response language; persists across resets
+    def __init__(self, session_id: str | None = None):
+        self.session_id = session_id
+        self.lock = threading.RLock()
+        self.language = "vi"          # response language; persists across resets
         self.reset(scenario_id="angry_customer")
 
     def reset(self, name="Morgan", personality="average", reactivity=None,
               persona="You are Morgan, a thoughtful person having a conversation.",
               seed_emotion=None, seed_intensity=0.0, model_id=None, scenario_id=None,
               language=None):
-        if language in ("hu", "en"):
+        if language in ("vi", "en"):
             self.language = language
         self.model_id = model_id or default_model_id()
         self.scenario_id = None
@@ -123,7 +131,7 @@ class ChatSession:
             name = persona_preset.display_name
             personality = scenario_label(persona_preset)
             reactivity = persona_preset.reactivity
-            self._persona_hu = persona_preset.base_persona
+            self._persona_original = persona_preset.base_persona
             self._persona_en = persona_preset.persona_for("en")
             seeds = dict(persona_preset.seed_emotions)
         else:
@@ -132,13 +140,15 @@ class ChatSession:
             if reactivity is None:
                 reactivity = REACTIVITY.get(personality, 1.0)
             # custom agents have no translation - the language directive does the work
-            self._persona_hu = self._persona_en = persona or ""
+            self._persona_original = self._persona_en = persona or ""
             if (seed_emotion and seed_emotion != "None" and seed_intensity > 0):
                 seeds = {seed_emotion: seed_intensity}
 
-        self.agent = Agent(name or "Morgan", personality, self._persona_hu,
+        self.agent = Agent(name or "Morgan", personality, self._persona_original,
                            model=self.model_id, provider=provider_of(self.model_id),
                            reactivity=reactivity)
+        if self.session_id is not None:
+            SESSIONS[self.session_id] = self.agent
         self._apply_language()
         self.messages: list[dict] = []
         self.memory = SessionMemory()
@@ -149,7 +159,9 @@ class ChatSession:
 
     def _apply_language(self):
         """Point the agent at the persona text for the current language."""
-        self.agent.base_persona = self._persona_en if self.language == "en" else self._persona_hu
+        self.agent.base_persona = (
+            self._persona_en if self.language == "en" else self._persona_original
+        )
 
     def send(self, message: str) -> str:
         # RAG: retrieve relevant prior turns *before* storing this one (#25, #26).
@@ -164,16 +176,24 @@ class ChatSession:
         return reply
 
 
-CHAT = ChatSession()
+def get_chat_session(session_id: str | None = None) -> tuple[str, ChatSession]:
+    """Return the requested session, creating one when no session exists yet."""
+    session_id = session_id or uuid.uuid4().hex
+    with _SESSIONS_LOCK:
+        session = _CHAT_SESSIONS.get(session_id)
+        if session is None:
+            session = ChatSession(session_id)
+            _CHAT_SESSIONS[session_id] = session
+        return session_id, session
 
 
-def chat_state() -> dict:
-    a = CHAT.agent
+def chat_state(session_id: str, chat: ChatSession) -> dict:
+    a = chat.agent
     s = agent_state(a)
     s["persona"] = a.base_persona
     s["reactivity"] = round(a.entity.reactivity, 2)
     s["system_prompt"] = a.prompt_modifier.build_system_prompt(
-        a.entity, a.base_persona, language=CHAT.language)
+        a.entity, a.base_persona, language=chat.language)
     has_key = bool(os.environ.get("GROQ_API_KEY"))
     # A Groq model needs a key; local (Ollama) models are always offerable.
     models = [{**m, "available": has_key if m["provider"] == "groq" else True}
@@ -184,23 +204,25 @@ def chat_state() -> dict:
         for p in SCENARIOS.values()
     ]
     return {
+        "session_id": session_id,
         "agent": s,
-        "messages": CHAT.messages,
+        "messages": chat.messages,
         "seed_options": SEED_EMOTIONS,
         "personalities": PERSONALITIES,
         "reactivity_ref": REACTIVITY,
         "has_key": has_key,
         "models": models,
-        "model_id": CHAT.model_id,
+        "model_id": chat.model_id,
         "scenarios": scenarios,
-        "scenario_id": CHAT.scenario_id,
-        "retrieved": CHAT.last_retrieved,
-        "retrieval_backend": CHAT.memory.backend,
-        "language": CHAT.language,
+        "scenario_id": chat.scenario_id,
+        "retrieved": chat.last_retrieved,
+        "retrieval_backend": chat.memory.backend,
+        "language": chat.language,
     }
 
 
 class ChatResetReq(BaseModel):
+    session_id: str = Field(min_length=1, max_length=128)
     name: str = "Morgan"
     personality: str = "average"
     reactivity: float | None = None
@@ -213,47 +235,57 @@ class ChatResetReq(BaseModel):
 
 
 class ChatSendReq(BaseModel):
+    session_id: str = Field(min_length=1, max_length=128)
     message: str
 
 
 class ChatLangReq(BaseModel):
-    language: str = "hu"
+    session_id: str = Field(min_length=1, max_length=128)
+    language: str = "vi"
 
 
 @app.get("/api/chat/state")
-def chat_get_state():
-    return chat_state()
+def chat_get_state(session_id: str | None = Query(default=None, min_length=1, max_length=128)):
+    session_id, chat = get_chat_session(session_id)
+    with chat.lock:
+        return chat_state(session_id, chat)
 
 
 @app.post("/api/chat/reset")
 def chat_reset(req: ChatResetReq):
-    CHAT.reset(req.name, req.personality, req.reactivity, req.persona,
-               req.seed_emotion, req.seed_intensity, req.model_id, req.scenario_id,
-               req.language)
-    return chat_state()
+    session_id, chat = get_chat_session(req.session_id)
+    with chat.lock:
+        chat.reset(req.name, req.personality, req.reactivity, req.persona,
+                   req.seed_emotion, req.seed_intensity, req.model_id, req.scenario_id,
+                   req.language)
+        return chat_state(session_id, chat)
 
 
 @app.post("/api/chat/language")
 def chat_set_language(req: ChatLangReq):
+    session_id, chat = get_chat_session(req.session_id)
     # Switch response language mid-conversation - takes effect on the next message,
     # no reset (the prompt is rebuilt every turn).
-    CHAT.language = req.language if req.language in ("hu", "en") else "hu"
-    CHAT._apply_language()
-    return chat_state()
+    with chat.lock:
+        chat.language = req.language if req.language in ("vi", "en") else "vi"
+        chat._apply_language()
+        return chat_state(session_id, chat)
 
 
 @app.post("/api/chat/send")
 def chat_send(req: ChatSendReq):
+    session_id, chat = get_chat_session(req.session_id)
     # Only Groq models need a key; local (Ollama) models run offline.
-    if provider_of(CHAT.model_id) == "groq" and not os.environ.get("GROQ_API_KEY"):
-        return {"error": "GROQ_API_KEY not set in .env - required for Groq models. "
-                         "Pick a local model to run offline."}
-    if req.message.strip():
-        try:
-            CHAT.send(req.message.strip())
-        except Exception as e:
-            return {"error": _friendly_llm_error(e)}
-    return chat_state()
+    with chat.lock:
+        if provider_of(chat.model_id) == "groq" and not os.environ.get("GROQ_API_KEY"):
+            return {"error": "Chưa cấu hình GROQ_API_KEY trong .env. Hãy chọn một mô hình "
+                             "chạy trên máy nếu muốn sử dụng ngoại tuyến."}
+        if req.message.strip():
+            try:
+                chat.send(req.message.strip())
+            except Exception as e:
+                return {"error": _friendly_llm_error(e)}
+        return chat_state(session_id, chat)
 
 
 # -- Static frontend -----------------------------------------------------------

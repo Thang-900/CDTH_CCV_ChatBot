@@ -1,8 +1,9 @@
 import { EMOTION_COLORS } from "../api.js";
+import { EMOTION_LABELS } from "../uiText.js";
 
 export default function EmotionBars({ emotions }) {
   if (!emotions || !emotions.length) {
-    return <div className="calm">- calm -</div>;
+    return <div className="calm">- bình tĩnh -</div>;
   }
   return (
     <>
@@ -11,7 +12,7 @@ export default function EmotionBars({ emotions }) {
         const color = EMOTION_COLORS[e.name] || "#94a3b8";
         return (
           <div className="emo-row" key={e.name}>
-            <span className="emo-name">{e.name}</span>
+            <span className="emo-name">{EMOTION_LABELS[e.name] || e.name}</span>
             <div className="bar-track">
               <div className="bar-fill" style={{ background: color, width: pct + "%" }} />
             </div>

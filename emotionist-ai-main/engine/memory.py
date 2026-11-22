@@ -2,9 +2,9 @@
 
 The decision note (#23 ADR) lives in BUILD_NOTES.md. In short:
 
-  * Store: in-memory list, scoped to a ChatSession. This is a single-user local
-    demo (like GAME/CHAT in server.py), so per-process memory already "survives
-    across requests in a session" (#24) without SQLite. Swap-in point is small.
+  * Store: in-memory list, scoped to a ChatSession. The server keeps each
+    session's memory in-process, so it survives across requests in that session
+    without SQLite. Swap-in point is small.
   * Embeddings: Ollama `nomic-embed-text` over stdlib urllib - no new dependency,
     no API key, runs offline (#25). Cosine similarity in pure Python.
   * Fallback: if embeddings are unavailable (model not pulled / Ollama down /

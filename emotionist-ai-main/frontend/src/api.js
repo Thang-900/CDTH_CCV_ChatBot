@@ -1,12 +1,34 @@
 // Shared API client + color maps (ported from web/common.js).
 
+const SESSION_STORAGE_KEY = "emotionist.session_id";
+
+function chatSessionId() {
+  let sessionId = sessionStorage.getItem(SESSION_STORAGE_KEY);
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId);
+  }
+  return sessionId;
+}
+
 export async function api(path, body) {
+  const isChatApi = path.startsWith("/api/chat/");
+  const isChatState = path === "/api/chat/state";
+  const sessionId = isChatApi ? chatSessionId() : null;
+
+  if (isChatState) {
+    path += `?session_id=${encodeURIComponent(sessionId)}`;
+  } else if (isChatApi && body) {
+    body = { ...body, session_id: sessionId };
+  }
+
   const res = await fetch(path, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  return res.json();
+  const data = await res.json();
+  return data;
 }
 
 export const EMOTION_COLORS = {

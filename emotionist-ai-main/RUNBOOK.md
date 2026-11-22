@@ -5,7 +5,7 @@ Checklist to put the demo live from your laptop. Follow top to bottom.
 ## Local-only demo (in-house, default)
 
 1. **Start it:** `./run.sh` -> http://127.0.0.1:8000
-2. Open **/chat**, pick a scenario (e.g. *Dühös ügyfél*), pick a model.
+2. Open **/chat**, pick a scenario (e.g. *Khách hàng tức giận*), pick a model.
 3. Sanity: send one message, confirm a reply + emotion bars move.
 
 ## Live demo over a tunnel (interviewer hits your URL)
@@ -14,7 +14,7 @@ Pre-warm everything **before** they're watching - first Ollama call is slow (~40
 
 1. **Pick the backend for visitors (#37):**
    - Offline/free: in `.env` set `LLM_PROVIDER=ollama`, then `ollama serve` and pre-pull: `ollama pull qwen2.5:3b`.
-   - Cloud HU quality: leave `LLM_PROVIDER=groq` with a valid `GROQ_API_KEY`.
+   - Cloud inference: leave `LLM_PROVIDER=groq` with a valid `GROQ_API_KEY`.
    - Either way, visitors can switch models in the UI dropdown - your machine serves them all.
 2. **Start the app:** `./run.sh`
 3. **Pre-warm the model:** in /chat, send one throwaway message and wait for the reply.
@@ -34,5 +34,5 @@ Pre-warm everything **before** they're watching - first Ollama call is slow (~40
 | Port busy | `PORT=8001 ./run.sh` (and `PORT=8001 ./tunnel.sh`) |
 | Groq model greyed out | `GROQ_API_KEY` missing/invalid in `.env` -> use a local model |
 | Local model errors | `ollama serve` not running, or model not pulled (`ollama pull qwen2.5:3b`) |
-| Hungarian looks broken | switch to **Groq Llama 3.3 70B** in the model dropdown, or flip the **language toggle to English** (best for the local qwen model) |
+| Vietnamese responses look incorrect | switch to **Groq Llama 3.3 70B** in the model dropdown, or flip the **language toggle to English** (often stronger with the local qwen model) |
 | Tunnel won't start | app not running, or `cloudflared` not installed |

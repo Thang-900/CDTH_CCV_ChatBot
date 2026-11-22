@@ -110,7 +110,7 @@ Anger, Gratification, Gratitude, Remorse are activated directly in `appraisal.py
 
 ### 8. Scenario personas (`agents/personas.py`)
 
-A `ScenarioPersona` is a *recipe for a whole `Agent`* - the counterpart you practice against (angry customer, fraud victim, defensive employee...). It's pure data: `id, display_name, role, situation, category, personality_score, reactivity, base_persona, seed_emotions`. `ChatSession.reset(scenario_id=...)` builds an `Agent` from the preset, applies `seed_emotions`, and runs the normal pipeline. `personality_score` maps to one of the three engine preset labels (the engine still builds an Entity from a label, not an arbitrary float - that's the pending dynamic-personality work). Presets are written in Hungarian for the OTP demo.
+A `ScenarioPersona` is a *recipe for a whole `Agent`* - the counterpart you practice against (angry customer, fraud victim, defensive employee...). It's pure data: `id, display_name, role, situation, category, personality_score, reactivity, base_persona, seed_emotions`. `ChatSession.reset(scenario_id=...)` builds an `Agent` from the preset, applies `seed_emotions`, and runs the normal pipeline. `personality_score` maps to one of the three engine preset labels (the engine still builds an Entity from a label, not an arbitrary float - that's the pending dynamic-personality work). Presets and default personas are written in Vietnamese, with English variants for the optional English response mode.
 
 ### 9. RAG / session memory (`engine/memory.py`)
 
@@ -138,7 +138,7 @@ Each `ChatSession` owns a `SessionMemory`. Per turn, **before** generating, it r
 | `engine/appraisal.py` | `OCCAppraisalEngine` - OCC rules + witness empathy track in `compute_deltas(event, entity, witness_event)`. `REACTIVITY` dict (personality defaults). `apply_transitions()` for cascades. |
 | `engine/prompt_modifier.py` | `PromptModifier` - emotion state -> first-person system prompt. Exports `BEHAVIORAL_PROFILES`, `NEUTRAL_PROFILE`, `weighted_params`, `describe_level` for UI use. |
 | `agents/agent.py` | `Agent` - full pipeline. `receive_and_respond(incoming_message, witness_event=None)`. Stores `last_event`. Constructor: `Agent(name, personality, base_persona, model, reactivity=None)`. |
-| `server.py` | FastAPI backend. `ChatSession` (the single practice-partner agent + `SessionMemory`). Serves the React build / `web/` fallback and JSON state at `/api/chat/state\|reset\|send`. Per-IP rate guard + friendly LLM-error handling. |
+| `server.py` | FastAPI backend. Manages isolated practice-partner sessions by `session_id` (`SESSIONS` stores each Agent; per-session chat state includes `SessionMemory`). Serves the React build / `web/` fallback and JSON state at `/api/chat/state\|reset\|send`. Per-IP rate guard + friendly LLM-error handling. |
 | `web/` | Frontend (vanilla HTML/CSS/JS, no build): `index.html` Two-Agents view, `chat.html` single-agent Chat view, `app.js`/`chat.js` per-view logic, `common.js` shared render helpers, `style.css`. |
 
 ---
